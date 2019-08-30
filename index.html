@@ -1,0 +1,300 @@
+<!------------------------
+
+Authors: Matthew Reilly, Mike Chantler
+19/11/2019
+What it does:
+main html that is ran
+all javascript, css and data file are link to here.
+
+----------------------->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>ref14 data</title>
+	<link rel="stylesheet" type="text/css" href="css/pack.css"/>
+	<link rel="stylesheet" type="text/css" href="css/barchart.css"/>
+	<link rel="stylesheet" type="text/css" href="css/force.css"/>
+	<link rel="stylesheet" type="text/css" href="css/general.css"/>
+	<link rel="stylesheet" type="text/css" href="css/scatter.css"/>
+	<script type="text/javascript" src="d3/d3.v4.js"></script>
+	<script src="lib/model/ref14model_v002.js"></script>
+	<script src="lib/views/scatter.js"></script>
+	<script src="lib/views/barchart.js"></script>
+	<script src="lib/views/pack.js"></script>
+	<script src="lib/views/force.js"></script>
+</head>
+
+<body>
+<section>
+  <nav>
+		<h3>All Universities</h3>
+		<div id="packDiv"></div>
+		<h3><div id="forceTitle"></div></h3>
+		<div id="forceDiv"></div>
+		<div id ="forcetext1"></div>
+<div id="forceHyperlink"></div>
+	</nav>
+	<article>
+		<h3><div id="barTitle"></div></h3>
+		<div id="barchart1Div"></div>
+	</article>
+	<article>
+    <h3><div id="scatterTitle"></div></h3>
+		<div id="myscatterplotDiv1"></div>
+	</article>
+	</section>
+
+
+<script type="text/javascript">
+"use strict"
+
+var dm1 = modelConstructor(); //Create datamodel object (gives access to methods in ref14model.js etc )
+var dataModel; //shorthand for dm1.model() and declared as nasty outer block variable for easy access from console.
+var bc1;
+var pc1;
+var f1;
+var sp1;
+var cdata;
+var sdata;
+var fdata;
+var div = d3.select("#myscatterplotDiv1").append("div")
+		.attr("class", "tooltip")
+		.style("opacity", 0);
+//=============== READ DATA FILES ================================
+
+
+d3.queue()
+	.defer(d3.csv, "data/topics/REF2014T30TopicOrder.csv")
+	.defer(d3.csv, "data/290183_REF_Contextual_table_1314_0.csv")
+	.defer(d3.csv, "data/learning-providers-plus.csv")
+	.defer(d3.json, "data/topics/REF2014T30Python.json")
+	.await(initialiseApp);
+
+//======================== MAIN FUNCTION =================================
+//Carries out all initialization and setup
+function initialiseApp(error, ref14data, ref14context , learningProviders, jsonTopicData){
+	//Check data files have loaded
+	if (error) {console . log (" there are errror with loading the data: ", error); return;}
+
+	//Create data model
+	dm1.loadData(ref14data, ref14context , learningProviders, jsonTopicData);
+	dataModel = dm1.model();
+	dataModel = dataModel.refEntries.filter(e=>e.environment["4*"] > 0);
+
+	//Layout and render flat data as pack
+	var nest = d3.nest()
+		.key(refEntry => refEntry.context.regionProvider)
+			 .sortKeys(d3.ascending) //sort a-z
+		.key(refEntry => refEntry.lp.TOWN)
+			 .sortKeys(d3.ascending)
+		.key(refEntry => refEntry["Institution name"])
+			 .sortKeys(d3.ascending)
+		.rollup(function (e) {return d3.sum(e,e=>e.context.scaledFTE);}) //add rollup to campact leaves and store refEntry info
+		.entries(dataModel);
+
+
+	pc1 = pack("#packDiv")
+		.appendClickFunction(packClickFunction)
+		.loadAndRenderNestDataset(nest, "REF2014");
+
+
+		//Create and load scatterplot1
+		sp1 = scatterplot("#myscatterplotDiv1")
+			.overrideKeyFunction(e => e["Institution name"])
+		.appendedMouseOverFunction(highligtpackNodesOfUniversitiesWithThisUni)
+		.appendedMouseOutFunction(removeHighlightingUni)
+		.appendedClickFunction(scatterClick)
+
+
+	//Create barchart
+	bc1 = barchart("#barchart1Div")
+	.overrideDataFieldFunction(e => Number(e.environment["4*"])) //Use the 4* assessment as the bar size
+	.overrideKeyFunction(e => e["UoAString with Multiple submission letter appended"])  //GUP key and y-axis category	//	.overrideTooltipFunction(e => {return e["Institution name"] + ", " +  e.UoAString + ", 4* = " + e["4*"];})
+		.appendedMouseOverFunction(highligtpackNodesOfUniversitiesWithThisUoA)
+		.appendedMouseOutFunction(removeHighlightingUoA)
+			.overrideMouseClickFunction(barClick)
+		.maxValueOfDataField(100);
+
+
+		f1 = force("#forceDiv")
+
+		var institutionClassesToHighlight; //Remember what we have highlighted so that we can remove the highlighting
+		var uoAtoHighlight;
+//bar chart clicked, update force and scatter
+	function barClick(d){
+		var refEntriesWithThisUoA = dataModel
+			.filter(e=>e.UoAString == d.UoAString);
+		console.log(d)
+
+				sp1.loadAndRenderDataset(refEntriesWithThisUoA)
+
+
+		var	data = dataModel.filter(e=>e.DocumentID == d.DocumentID)
+		data = d3.nest().entries(data)
+		f1.loadAndRenderDataset(data[0].environment.topicWeights)
+
+		d3.selectAll("#forceTitle")
+				.text("Topic Model for "+d.UoAString+" at "+data[0]["Institution name"]);
+		d3.selectAll("#forceHyperlink")
+				.text(d.environment.URL);
+
+		d3.selectAll("#forcetext1")
+				.text("Link to Paper: ");
+		d3.selectAll("#scatterTitle")
+				.text("Universities with "+ d.UoAString);
+	}
+	//scatter clicked, update force and barchart
+	function scatterClick(d){
+		var refEntriesWithThisUoA = dataModel
+			.filter(e=>e["Institution name"] == d["Institution name"]);
+		console.log(d)
+
+
+				bc1.loadAndRenderDataset(refEntriesWithThisUoA)
+
+
+		var	data = dataModel.filter(e=>e.DocumentID == d.DocumentID)
+		data = d3.nest().entries(data)
+		f1.loadAndRenderDataset(data[0].environment.topicWeights)
+		d3.selectAll("#barTitle")
+				.text("4* UoA Environments for "+d["Institution name"]);
+		d3.selectAll("#forceTitle")
+				.text("Topic Model for "+d.UoAString+" at "+data[0]["Institution name"]);
+		d3.selectAll("#forceHyperlink")
+				.text(d.environment.URL);
+
+		d3.selectAll("#forcetext1")
+				.text("Link to Paper: ");
+
+	}
+
+//hightlight pack and scatter
+	function highligtpackNodesOfUniversitiesWithThisUoA(d){
+		//Get UoA name of clicked bar
+		var clickedUoA = d.UoAString;
+
+		//Get list of REF entries with this UoA
+		var refEntriesWithThisUoA = dataModel
+			.filter(e=>e.UoAString == clickedUoA);
+		//Extract list of cleaned university (institution) class names
+		institutionClassesToHighlight = refEntriesWithThisUoA
+			.map(function(e){
+				return ".nest-key--"+e["Institution name"].replace(/[\W]+/g,"_")
+			})
+
+			uoAtoHighlight=".nest-key--"+d["Institution name"].replace(/[\W]+/g,"_");
+
+		institutionClassesToHighlight.forEach(function(institutionClass){
+			d3.selectAll(institutionClass).classed ("highlight", true)
+		})
+
+
+		d3.selectAll(".key--"+d["Institution name"].replace(/[\W]+/g,"_")) //select all DOM elements with class "key--<d.keyField>"
+				.classed("highlight", true)
+
+		div.transition()
+		.duration(200)
+		.style("opacity", 0.9);
+		div.html(d.context["Unit of assessment name"]+ "</br>"+"4*: "+d.environment["4*"]+"%" + "<br/>"+ "Word Count: " + d.environment.WordCount)
+		.style("left", (d3.event.pageX) + "px")
+		.style("top", (d3.event.pageY - 28) + "px");
+	}
+//remove hightlighting on pack and scatter
+	function removeHighlightingUoA (d){
+		institutionClassesToHighlight.forEach(function(institutionClass){
+			d3.selectAll(institutionClass).classed ("highlight", false)
+		})
+
+		d3.selectAll(".key--"+d["Institution name"].replace(/[\W]+/g,"_")) //select all DOM elements with class "key--<d.keyField>"
+				.classed("highlight", false)
+		div.transition()
+		.duration(500)
+		.style("opacity", 0);
+	}
+//highlight pack and barchart
+	function highligtpackNodesOfUniversitiesWithThisUni(d){
+		//Get UoA name of clicked bar
+		var clickedUni = d["Institution name"];
+
+		//Get list of REF entries with this UoA
+		var refEntriesWithThisUni = dataModel
+			.filter(e=>e["Institution name"] == clickedUni);
+		//Extract list of cleaned university (institution) class names
+		institutionClassesToHighlight = refEntriesWithThisUni
+			.map(function(e){
+				return ".nest-key--"+e["Institution name"].replace(/[\W]+/g,"_")
+			})
+
+			uoAtoHighlight=".nest-key--"+d.UoAString.replace(/[\W]+/g,"_");
+
+		institutionClassesToHighlight.forEach(function(institutionClass){
+			d3.selectAll(institutionClass).classed ("highlight", true)
+		})
+
+
+		d3.selectAll(".key--"+d.UoAString.replace(/[\W]+/g,"_")) //select all DOM elements with class "key--<d.keyField>"
+				.classed("highlight", true)
+
+		div.transition()
+		.duration(200)
+		.style("opacity", 0.9);
+		div.html(d["Institution name"]+ "</br>"+"4*: "+d.environment["4*"]+"%" + "<br/>"+ "Word Count: " + d.environment.WordCount)
+		.style("left", (d3.event.pageX) + "px")
+		.style("top", (d3.event.pageY - 28) + "px");
+	}
+
+//remove highlighting from pack and barchart
+	function removeHighlightingUni (d){
+		institutionClassesToHighlight.forEach(function(institutionClass){
+			d3.selectAll(institutionClass).classed ("highlight", false)
+		})
+
+		d3.selectAll(".key--"+d.UoAString.replace(/[\W]+/g,"_")) //select all DOM elements with class "key--<d.keyField>"
+				.classed("highlight", false)
+		div.transition()
+		.duration(500)
+		.style("opacity", 0);
+	}
+
+}
+
+//==================== HELPER FUNCTIONS =========================================
+function packClickFunction(d){
+	//If leaf node then user has clicked on a University
+	//so render that university's data in a barchart
+		cdata =d;
+		var refEntriesWithThisUoA = dataModel
+	if (d.height == 0) {
+
+		console.log("pack click, d.height, d = ", d.data.key)
+		var uni = d.data.key;
+		renderUniversityDataAsBarchart(uni)
+	}
+
+}
+
+function renderUniversityDataAsBarchart(university){
+	//Generate set of sorted REF entries for this university
+	var bc1Data = dataModel
+		.filter(e => e["Institution name"] == university)
+			.filter(e => e.environment["4*"] >0)
+		.sort((a, b) => d3.ascending(
+			a["UoAString with Multiple submission letter appended"],
+			b["UoAString with Multiple submission letter appended"]
+		))
+		d3.selectAll("#barTitle")
+				.text("4* UoA Environments for "+university);
+	//Render the barchart
+
+
+sdata=bc1Data
+	bc1.loadAndRenderDataset(sdata)
+
+
+
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+
+
+/*==============================================
+ *
+ * CSS Stylesheet for general scatterplot
+ *
+ * 04/09/2018	mjc	Created
+ *===============================================*/
+
+/*Watch out for the spaces below (space = descendant relationship, no-space = AND) */
+/* note '.' denotes class, '#' denotes ID */
+.scatterplot .scatter.enterSelection  { /* Select decendants of class 'scatterplot' elements where the descendants  are both of class  'bars'  AND  class 'enterSelection' */
+	fill: pink;
+	stroke: gray;
+	stroke-width: 1;
+	opacity: 0.5;
+}
+
+.scatterplot .scatter.updateSelection {
+	fill: blue;
+	stroke: gray;
+	stroke-width: 1;
+	opacity: 0.5;
+}
+
+.scatterplot .scatter.exitSelection {
+	fill: gray;
+	stroke: gray;
+	stroke-width: 1;
+	opacity: 0.5;
+}
+
+.scatterplot .scatter.highlight {
+	fill: magenta;
+	stroke: black;
+	stroke-width: 2;
+	opacity: 1.0;
+}
+
+
+		.scatterplot .scatter:hover{
+	stroke: black;
+	stroke-width: 2;
+	opacity: 1.0;
+}
